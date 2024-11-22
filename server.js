@@ -59,13 +59,51 @@ server.post('/guess', async (req, res) => {
     }
     let session = activeSessions[sessionID]
     if (!session) {
-        return res.status(404).send({error: "Awaaion does not exist"})
+        return res.status(404).send({error: "Session does not exist"})
     }
     if (guess.length !== 5){
         return restart.status(400).send({error: "Guess must contain 5 letters"})
     }
 
-    let actualValue = session.wordToGuess.split
+    let actualValue = session.wordToGuess.split("")
+    let guesses = []
+    session.remaningGuesses -= 1
+
+    for(let i = 0; i < guess.length; i++){
+        let letter = guess[i].toLowerCase()
+        let correctness = "Incorrect"
+        if(!letter.match(/[a-z]/)){
+            return res.status(400).send({error: "Not enough letters"})
+        }
+        if(letter === actualValue[i]) {
+            correctness = "Correct"
+            if(!session.rightLetters.includes(letter)){
+                session.rightLetters.push(letter);
+            }
+            if (session.closeLetters.include(letter)) {
+                let index = session.closeLetters.indexOf(letter)
+                session.closeLetters.splice(index, 1)
+            }
+        }
+        else if(realValue.includes(letter)) {
+            correctness = "Close"
+            if (!sessions.closeLetters.includes(letter) && !session.rightLetters.includes(letter)) {
+                session.closeLetters.push(letter)
+            }
+        }
+        guess.push({value: letter, result: correctness})
+    }
+    sessions.guesses.push(guess)
+    if(userGuess === session.wordToGuess) {
+        session.gameOver = true
+    } else if(session.remaningGuesses <= 0) {
+        session.gameOver = true
+    }
+    return res.status(201).send({gameState: session})
+})
+
+server.delete('/reset', (req, res) => {
+    let ID = req.query.sessionID
 })
 //Do not remove this line. This allows the test suite to start
 //multiple instances of your server on different ports
