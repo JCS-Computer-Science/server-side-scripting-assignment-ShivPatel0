@@ -1,110 +1,186 @@
 const express = require("express");
-const uuid = require("uuid")
+const uuid = require("uuid");
 const server = express();
-server.use(express.json())
-server.use(express.static("public"))
+server.use(express.json());
+server.use(express.static("public"));
 
-//All your code goes here
-let activeSessions={}
+// All your code goes here
+let activeSessions = {}
 
-
-async function createWord(){
+async function generateWord() {
     let response = await fetch("https://random-word-api.vercel.app/api?words=1&length=5")
-    let result = await response.json()
-    let randWord = results[0]
-    return randWord
+     let results = await response.json() 
+
+
+    let randomWord = results[0]
+    return randomWord
 }
 
-server.get("/newgame", async(req, res) => {
-    let newID = uuid.v4();
-    let ans = await createWord()
-    let answer = req.query.answer
-    if (answer) {
-        ans = answer
+server.get("/newgame", async (req,res) => {
+    let newID =uuid.v4();
+    let word = await generateWord();
+    let userWord = req.query.answer; 
+    if (userWord) {
+
+        word = userWord
     }
-    let newgame = {
-        wordToGuess: ans,
+         let gameData = {
+        wordToGuess: word,
         guesses: [],
-        closeLetters:[],
-        rightLetters: [],
+        wrongLetters: [],
+        closeLetters: [],
+        rightLetters:[],
         remainingGuesses: 6,
-        gameOver: false
+        gameOver:false
     }
-    activeSessions[newID] = newgame;
-    res.status(201).send({sessionID: newID})
-})
+    activeSessions[newID] = gameData
+    res.status(201).send({ sessionID: newID })
+
+});
+
+
 
 server.get('/gamestate', (req, res) => {
     let sessionID = req.query.sessionID
-    if (!sessionID) {
-        return res.status(400).send({error: "Session ID is invalid"})
+
+if (!sessionID) {
+        return res.status(400).send({ error: "Invalid Session ID" })
     } else if (activeSessions[sessionID]) {
-        return res.status(200).send({gameState: activeSessions[sessionID]})
+        return res.status(200).send({ gameState: activeSessions[sessionID] })
     } else {
-        return res.status(404).send({error: "Game does not exist"})
+        return res.status(404).send({ error: "Invalid Game" })
     }
 })
-server.post('/guess', async (req, res) => {
-    let sessionID = req.body.sessionsID
-    let guess = req.body.guess
-    let r = await fetch ("https://api.dictionaryapi.dev/api/v2/entries/en/" + guess)
-    let results = await r.json()
-    console.log(results)
+server.post('/guess', async (req,res)=> {
+          let sessionID = req.body.sessionID 
+          let userGuess = req.body.guess 
 
-    if(!guess == "phase" && results.title === "No definition"){
-        return res.status(400).send({error: "Word does not exist"})
+    let response = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + userGuess)  
+    let dictionaryData = await response.json()
+    console.log(dictionaryData)
+
+    
+
+if (!userGuess == "phase" && dictionaryData.title === "No Definitions Found") {
+        return res.status(400).send({ error: "Not a Word in List" })
     }
     if (!sessionID) {
-        return res.status(400).send({error: "Session ID is invalid"})
+        return res.status(400).send({ error: "Invalid Session ID" })
+
     }
     let session = activeSessions[sessionID]
     if (!session) {
-        return res.status(404).send({error: "Session does not exist"})
+        return res.status(404).send({ error: "Invalid Session" })
+
     }
-    if (guess.length !== 5){
-        return restart.status(400).send({error: "Guess must contain 5 letters"})
+    if (userGuess.length !== 5) {
+        return res.status(400).send({ error: "Not enough Letters" });
+
     }
 
-    let actualValue = session.wordToGuess.split("")
-    let guesses = []
-    session.remaningGuesses -= 1
+    let targetWordArray =session.wordToGuess.split("")
 
-    for(let i = 0; i < guess.length; i++){
-        let letter = guess[i].toLowerCase()
-        let correctness = "Incorrect"
-        if(!letter.match(/[a-z]/)){
-            return res.status(400).send({error: "Not enough letters"})
-        }
-        if(letter === actualValue[i]) {
-            correctness = "Correct"
-            if(!session.rightLetters.includes(letter)){
-                session.rightLetters.push(letter);
+    let currentGuess =[]
+    session.remainingGuesses -=1;
+
+for (let i = 0; i < userGuess.length; i++) {
+
+        let letter = userGuess[i].toLowerCase()
+        let correctness = "WRONG"
+        if (!letter.match(/[a-z]/)) {
+            return res.status(400).send({ error: "Not Enough Letters" })
+    }
+        if (letter === targetWordArray[i]) {
+            correctness ="RIGHT";
+            if (!session.rightLetters.includes(letter)) {
+                session.rightLetters.push(letter)
             }
-            if (session.closeLetters.include(letter)) {
+            if (session.closeLetters.includes(letter)) {
                 let index = session.closeLetters.indexOf(letter)
-                session.closeLetters.splice(index, 1)
+                session.closeLetters.splice(index, 1);
             }
-        }
-        else if(realValue.includes(letter)) {
-            correctness = "Close"
-            if (!sessions.closeLetters.includes(letter) && !session.rightLetters.includes(letter)) {
+    } else if (targetWordArray.includes(letter)) {
+            correctness = "CLOSE";
+            if (!session.closeLetters.includes(letter) && !session.rightLetters.includes(letter)) {
                 session.closeLetters.push(letter)
             }
+    } else {
+        if (!session.wrongLetters.includes(letter)) {
+                session.wrongLetters.push(letter)
         }
-        guess.push({value: letter, result: correctness})
+        }
+
+        currentGuess.push({ value: letter, result: correctness })
     }
-    sessions.guesses.push(guess)
-    if(userGuess === session.wordToGuess) {
+
+    session.guesses.push(currentGuess)
+
+
+
+    if (userGuess === session.wordToGuess) {
         session.gameOver = true
-    } else if(session.remaningGuesses <= 0) {
+    } else if (session.remainingGuesses <= 0) {
         session.gameOver = true
     }
-    return res.status(201).send({gameState: session})
-})
+
+    return res.status(201).send({ gameState: session })
+});
+
 
 server.delete('/reset', (req, res) => {
-    let ID = req.query.sessionID
+    let sessionID = req.query.sessionID
+
+    if (!sessionID) {
+        res.status(400).send({ error: "Invalid Session ID" })
+        return;
+    }
+    if (activeSessions[sessionID]) {
+        activeSessions[sessionID] = {
+            wordToGuess: undefined,
+            guesses: [],
+            wrongLetters: [],
+            closeLetters: [],
+            rightLetters: [],
+            remainingGuesses: 6,
+            gameOver: false
+        };
+        return res.status(200).send({ gameState: activeSessions[sessionID] })
+    } else {
+        return res.status(404).send({ error: "Invalid Session ID" })
+    }
 })
-//Do not remove this line. This allows the test suite to start
-//multiple instances of your server on different ports
+server.delete("/delete", (req, res) => {
+    let sessionID = req.query.sessionID;
+    if (!sessionID) {
+        res.status(400).send({ error: "Invalid Session ID" })
+    }
+    if (activeSessions[sessionID]) {
+        delete activeSessions[sessionID];
+        res.status(204).send({ error: "Invalid Session ID" })
+    } else {
+        res.status(404).send({ error: "Invalid Session ID" })
+    }
+})
+
+server.get("/hint", async (req, res) => {
+    let sessionID = req.query.sessionID;
+    if (!sessionID) {
+        return res.status(400).send({ error: "Invalid Session ID" })
+    }
+
+    if (!activeSessions[sessionID]) {
+        res.status(404).send({ error: "Invalid Session ID" })
+    } else if (sessionID) {
+        let response = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + userGuess)
+        let dictionaryResults = await response.json();
+        let definition = dictionaryResults[0].meanings.definitions[0].definition
+        return definition
+    }
+
+});
+
+
+
+// Do not remove this line. This allows the test suite to start
+// multiple instances of your server on different ports
 module.exports = server;
